@@ -1,4 +1,3 @@
-from tkinter import N
 import torch
 
 from spconv.format import ELLR
