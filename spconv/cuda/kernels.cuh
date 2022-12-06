@@ -2,6 +2,8 @@
 
 #include <torch/extension.h>
 
+#include "util/shmem_allocator.cuh"
+
 template <typename value_t, typename idx_t>
 __global__ void sp_conv2d_kernel(
     const value_t *input,
@@ -30,8 +32,6 @@ __global__ void sp_conv2d_kernel(
     if (tid >= c_out) {
         return;
     }
-
-    // extern __shared__ value_t input_buf[];
 
     value_t bias_val = bias[tid];
 
@@ -264,9 +264,9 @@ __global__ void sp_conv2d_kernel_v4(
 
     idx_t row_nnz = weight_row_nnz[out_row];
 
-    __shared__ void *shared_mem;
-    value_t *weight_values_local = (value_t*)shared_mem;
-    idx_t *weight_col_idx_local = (idx_t*)&weight_values_local[weight_max_row_nnz];
+    ShmemAllocator shmem;
+    value_t *weight_values_local = shmem.alloc<value_t>(weight_max_row_nnz);
+    idx_t *weight_col_idx_local = shmem.alloc<idx_t>(weight_max_row_nnz);
 
     int tid = threadIdx.x;  // Rename for readability (compiler should optimize this out)
     int threads = blockDim.x;
@@ -276,8 +276,8 @@ __global__ void sp_conv2d_kernel_v4(
         int i = chunk * threads + tid;
 
         if (i < row_nnz) {
-            weight_values_local[i] = weight_values[i];
-            weight_col_idx_local[i] = weight_col_idx[i];
+            weight_values_local[i] = weight_values[out_row][i];
+            weight_col_idx_local[i] = weight_col_idx[out_row][i];
         }
     }
 
@@ -312,7 +312,7 @@ __global__ void sp_conv2d_kernel_v4(
 
         for (idx_t nz_i = 0; nz_i < row_nnz; nz_i++) {
             // Get corresponding value from
-            idx_t k = weight_col_idx_local[out_row][nz_i];
+            idx_t k = weight_col_idx_local[nz_i];
 
             // Index location within filter
             idx_t c_i = k / (r * s);
@@ -325,7 +325,7 @@ __global__ void sp_conv2d_kernel_v4(
             idx_t img_loc_j = j + s_i * dilation_x;
 
             value_t inp_val = input[n_i][c_i][img_loc_i][img_loc_j];
-            dot_prod += weight_values_local[out_row][nz_i] * inp_val;
+            dot_prod += weight_values_local[nz_i] * inp_val;
         }
 
         output[out_row][out_col] = dot_prod;

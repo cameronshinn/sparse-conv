@@ -365,8 +365,8 @@ torch::Tensor spconv2d_v4(
     cudaStream_t stream = c10::cuda::getCurrentCUDAStream();
 
     AT_DISPATCH_FLOATING_TYPES(input.type(), "spconv2d_v4", ([&] {
-        size_t shmem_size = 2 * weight_values.sizes()[1] * sizeof(scalar_t);  // Shared memory space for sparse matrix row
-        sp_conv2d_kernel_v3<scalar_t, idx_t><<<grid_size, block_size, shmem_size, stream>>>(
+        size_t shmem_size = (weight_values.sizes()[1] + 1) * sizeof(scalar_t) + (weight_values.sizes()[1] + 1) * sizeof(idx_t);  // Shared memory space for sparse matrix row
+        sp_conv2d_kernel_v4<scalar_t, idx_t><<<grid_size, block_size, shmem_size, stream>>>(
             input.packed_accessor32<scalar_t, 4, torch::RestrictPtrTraits>(),
             weight_values.packed_accessor32<scalar_t, 2, torch::RestrictPtrTraits>(),
             weight_col_idx.packed_accessor32<idx_t, 2, torch::RestrictPtrTraits>(),

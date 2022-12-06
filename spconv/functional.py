@@ -1,12 +1,11 @@
-from socket import has_dualstack_ipv6
 from typing import Optional, Union
 
 import torch
 from torch.autograd import Function
 from torch.autograd.function import FunctionCtx
 
-from format import ELLR
-import cuda
+from .format import ELLR
+from . import cuda
 
 class SpConv2d(Function):
     @staticmethod
